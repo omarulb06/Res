@@ -1,0 +1,68 @@
+# =============================================================================
+#  GitLab CI — builds a release APK for the Venue Reservation Flutter app.
+# -----------------------------------------------------------------------------
+#  Uses the official `cirruslabs/flutter` image, which ships with Flutter
+#  stable, the Android SDK + build-tools, Java 17, Gradle, and
+#  pre-accepted Android SDK licenses, so the pipeline runs out-of-the-box.
+#
+#  After the pipeline finishes, download the APK from:
+#    Project › Build › Pipelines › (latest) › `build_apk` › "Download artifacts"
+#  or directly from the job's "Browse" view under:
+#    build/app/outputs/flutter-apk/
+# =============================================================================
+
+image: ghcr.io/cirruslabs/flutter:stable
+
+stages:
+  - build
+
+variables:
+  # Keep pub + gradle caches inside the project dir so GitLab can cache them.
+  PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  # Reduce noise from the Flutter tool.
+  FLUTTER_SUPPRESS_ANALYTICS: "true"
+
+cache:
+  key:
+    files:
+      - pubspec.yaml
+  paths:
+    - .pub-cache/
+    - .dart_tool/
+    - .gradle/
+    - android/.gradle/
+
+build_apk:
+  stage: build
+  timeout: 40m
+  before_script:
+    - flutter --version
+    - flutter config --no-analytics --no-cli-animations
+    # If this is a lib-only scaffold (no android/ folder yet), generate the
+    # Android platform project. Idempotent: it won't overwrite existing files.
+    - |
+      if [ ! -d android ]; then
+        echo "No android/ folder detected — scaffolding via 'flutter create .'"
+        flutter create . \
+          --platforms=android \
+          --project-name=venue_reservation \
+          --org=com.example.venue \
+          --description="Event venue daily reservation app"
+      fi
+    - flutter pub get
+  script:
+    - flutter build apk --release
+    # Also build split-per-ABI variants (~1/3 the size of the universal APK).
+    - flutter build apk --release --split-per-abi
+    - ls -lh build/app/outputs/flutter-apk/
+  artifacts:
+    name: "venue-reservation-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/app/outputs/flutter-apk/*.apk
+    expire_in: 30 days
+  rules:
+    # Build on pushes to any branch and on manual pipeline runs.
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

@@ -1,0 +1,189 @@
+// =============================================================================
+//  Cloud Firestore Security Rules — Event Venue Reservation App
+// -----------------------------------------------------------------------------
+//  Role model:
+//    - client  : can read PUBLIC approved venues, can create bookings
+//    - owner   : can CRUD their own venues; can read/update bookings for them
+//    - admin   : full read/write; approves listings, manages users/roles
+//
+//  Role source of truth lives in Firestore at /users/{uid}.role.
+//  (Optionally mirror it as a custom auth claim `request.auth.token.role`
+//   through a Cloud Function for cheaper, in-token checks.)
+//
+//  Public clients (unauthenticated guests) can still browse public, approved
+//  venues; they must enter a PIN *in the app* to view private ones — the
+//  rules intentionally expose private venues' metadata so the UI can gate on
+//  the accessCode field. In production, consider moving accessCode into a
+//  sub-document only readable by the owner/admin, and validating PIN entry
+//  via a Cloud Function instead.
+// =============================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --------------------------- Helper functions ---------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function myRole() {
+      return isSignedIn() ? userDoc(request.auth.uid).data.role : 'guest';
+    }
+
+    function isAdmin() { return isSignedIn() && myRole() == 'admin'; }
+    function isOwner() { return isSignedIn() && myRole() == 'owner'; }
+    function isClient() { return isSignedIn() && myRole() == 'client'; }
+
+    function isSuspended() {
+      return isSignedIn()
+        && userDoc(request.auth.uid).data.get('suspended', false) == true;
+    }
+
+    // -------------------------------- users ---------------------------------
+    //
+    // - A user can read & update their own profile (never change their own role).
+    // - Admins can read/write any user doc, including role & suspended.
+    // - On first sign-in, the app creates /users/{uid} with role=client.
+    //
+    match /users/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'client'
+        && request.resource.data.uid == uid;
+
+      allow update: if
+        // Owner of the doc may update profile fields, but not role/suspended.
+        (isSignedIn() && request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.get('suspended', false)
+             == resource.data.get('suspended', false))
+        // Admins may update anything, including role & suspension.
+        || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------- venues ---------------------------------
+    //
+    // Reads:
+    //   - Admins can read everything.
+    //   - Owners can read anything they own (approved or not).
+    //   - Everyone else (incl. guests) can read ONLY approved venues.
+    //     The PIN check for private venues happens client-side; see note above.
+    //
+    // Writes:
+    //   - Owners can create venues they own (`ownerId == auth.uid`) but
+    //     `isApprovedByAdmin` MUST be false at creation time.
+    //   - Owners can update their own venues but cannot flip
+    //     `isApprovedByAdmin` themselves — only admins can.
+    //   - Admins can CRUD any venue.
+    //
+    match /venues/{venueId} {
+      allow read: if
+        resource.data.isApprovedByAdmin == true
+        || isAdmin()
+        || (isOwner() && !isSuspended()
+            && resource.data.ownerId == request.auth.uid);
+
+      allow create: if
+        (isOwner() || isAdmin())
+        && !isSuspended()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.isApprovedByAdmin == false
+        && validateVenueShape(request.resource.data);
+
+      allow update: if
+        isAdmin()
+        || (isOwner() && !isSuspended()
+            && resource.data.ownerId == request.auth.uid
+            // Owners cannot self-approve or transfer ownership.
+            && request.resource.data.ownerId == resource.data.ownerId
+            && request.resource.data.isApprovedByAdmin
+               == resource.data.isApprovedByAdmin
+            && validateVenueShape(request.resource.data));
+
+      allow delete: if isAdmin()
+        || (isOwner() && resource.data.ownerId == request.auth.uid);
+    }
+
+    function validateVenueShape(d) {
+      return d.title is string && d.title.size() > 0
+        && d.location is string && d.location.size() > 0
+        && d.isPublic is bool
+        && (d.isPublic == true
+            || (d.accessCode is string
+                && d.accessCode.size() >= 4
+                && d.accessCode.size() <= 6))
+        && d.units is list && d.units.size() > 0;
+    }
+
+    // ------------------------------ bookings --------------------------------
+    //
+    // Reads:
+    //   - Admin can read all.
+    //   - The venue owner can read bookings for their venues.
+    //   - For guest-created bookings (no auth), we allow reading only by the
+    //     admin/owner — guests do not get read access by email to avoid PII
+    //     scraping. If you want guest "booking lookup by code", add a
+    //     short-lived callable function.
+    //
+    // Creates:
+    //   - ANYONE (incl. guest) can create a booking as long as the data is
+    //     well-formed, references an approved venue, status is 'pending', and
+    //     the client contact fields are non-empty.
+    //
+    // Updates:
+    //   - Only admins or the venue owner may update a booking (e.g. to
+    //     confirm/cancel it or change status).
+    //
+    // Deletes:
+    //   - Admin only.
+    //
+    match /bookings/{bookingId} {
+      allow read: if
+        isAdmin()
+        || (isOwner()
+            && get(/databases/$(database)/documents/venues/$(resource.data.venueId))
+                 .data.ownerId == request.auth.uid);
+
+      allow create: if
+        validateBookingShape(request.resource.data)
+        // Must reference an approved venue
+        && get(/databases/$(database)/documents/venues/$(request.resource.data.venueId))
+             .data.isApprovedByAdmin == true
+        // Status is pending at creation (owner/admin later confirm).
+        && request.resource.data.status == 'pending';
+
+      allow update: if
+        isAdmin()
+        || (isOwner()
+            && get(/databases/$(database)/documents/venues/$(resource.data.venueId))
+                 .data.ownerId == request.auth.uid
+            // Owner can only transition status / toggle fields relevant to
+            // their management (status, totalPrice override).
+            && request.resource.data.venueId == resource.data.venueId
+            && request.resource.data.clientName == resource.data.clientName
+            && request.resource.data.clientEmail == resource.data.clientEmail);
+
+      allow delete: if isAdmin();
+    }
+
+    function validateBookingShape(d) {
+      return d.venueId is string && d.venueId.size() > 0
+        && d.unitIds is list && d.unitIds.size() > 0
+        && d.dates is list && d.dates.size() > 0
+        && d.clientName is string && d.clientName.size() > 0
+        && d.clientPhone is string && d.clientPhone.size() >= 6
+        && d.clientEmail is string && d.clientEmail.matches('.+@.+\\..+')
+        && d.totalPrice is number && d.totalPrice >= 0;
+    }
+  }
+}
