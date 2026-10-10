@@ -6,6 +6,7 @@ class VenueProvider extends ChangeNotifier {
   final VenueService _svc = VenueService();
 
   Stream<List<Venue>> watchAll() => _svc.watchAll();
+  Stream<List<Venue>> watchAllForAdmin() => _svc.watchAllForAdmin();
   Stream<List<Venue>> watchForOwner(String uid) => _svc.watchForOwner(uid);
 
   Future<void> save(Venue venue) async {

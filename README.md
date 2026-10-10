@@ -78,7 +78,188 @@ flutter run
    On successful init you'll see `[boot] Firebase initialized -> using
    Cloud Firestore` in the console and the mock fallback is skipped.
 
-## 4. Project layout
+## 4. Building the iOS app (requires macOS + Xcode)
+
+> ⚠️ **iOS builds can only be produced on macOS** — Apple's codesign + Xcode
+> toolchain is Mac-only. Windows and Linux cannot build iOS binaries, even
+> for the Simulator. The commands below assume you are sitting at a Mac
+> (local, lab, or a Mac-in-the-cloud service like MacStadium / MacInCloud).
+
+### 4.1 One-time Mac setup
+
+```bash
+# 1. Install Xcode from the Mac App Store (~15 GB), then:
+sudo xcode-select --install
+sudo xcodebuild -license accept
+sudo xcodebuild -runFirstLaunch
+
+# 2. Install CocoaPods — pulls native Firebase / Google Sign-In pods.
+sudo gem install cocoapods
+
+# 3. Install Flutter 3.24.5 (same channel this project was built on).
+cd ~
+git clone https://github.com/flutter/flutter.git -b stable
+echo 'export PATH="$HOME/flutter/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+flutter --version          # should print 3.24.x
+flutter doctor             # all "iOS toolchain" lines must be green ✓
+```
+
+### 4.2 Get the project onto the Mac
+
+Pick whichever is easiest for you:
+
+| Method | How |
+|---|---|
+| **Git clone** (cleanest for repeat builds) | `git clone <your-remote> ~/Res` |
+| **Zip + copy** (one-off) | On Windows: `Compress-Archive -Path C:\Res\* -DestinationPath C:\Res\res-src.zip -Exclude 'build','.dart_tool','.gradle','*.apk','firebase-tools'`<br>On Mac: `unzip ~/Downloads/res-src.zip -d ~/Res` |
+| **OneDrive / iCloud** | Sync the `C:\Res` folder to the Mac |
+
+### 4.3 Register iOS as a Firebase app (first time only)
+
+The current `lib/firebase_options.dart` only has Android credentials. To use
+real Firebase on iOS you must register the iOS bundle in your Firebase
+project and regenerate the config:
+
+```bash
+cd ~/Res
+dart pub global activate flutterfire_cli
+flutterfire configure --project=resapp-4e5b2 --platforms=ios,android
+# This writes ios/Runner/GoogleService-Info.plist and updates
+# lib/firebase_options.dart with the iOS entries.
+```
+
+Then, in Xcode, make sure the generated `GoogleService-Info.plist` is
+listed under **Runner > Build Phases > Copy Bundle Resources**
+(FlutterFire usually does this automatically).
+
+If you don't need Firebase on iOS right away, the app will fall back to
+mock-data mode automatically — skip this step.
+
+### 4.4 Install dependencies
+
+```bash
+cd ~/Res
+flutter pub get
+cd ios && pod install && cd ..
+```
+
+> **M1/M2/M3 Mac?** If `pod install` fails with ffi / arch errors:
+> ```bash
+> sudo arch -x86_64 gem install ffi
+> arch -x86_64 pod install
+> ```
+
+### 4.5 Pick a build target
+
+#### A — Run on the iOS Simulator (fastest, no Apple account needed)
+
+```bash
+open -a Simulator           # launch any simulator
+flutter run                 # auto-targets the running simulator
+```
+
+Hot reload works just like Android.
+
+#### B — Run on your own iPhone (free Apple ID, 7-day signing)
+
+1. Plug the iPhone in via USB, tap **Trust** on the phone.
+2. Open the project in Xcode:
+   ```bash
+   open ios/Runner.xcworkspace    # NOT the .xcodeproj
+   ```
+3. In Xcode:
+   - Select the **Runner** target → **Signing & Capabilities**.
+   - Check **Automatically manage signing**.
+   - **Team** → *Add an Account…* → sign in with your Apple ID (free is fine).
+   - Change **Bundle Identifier** to something unique, e.g.
+     `com.yourname.venuereservation` (the default `com.example.*` will be
+     rejected by Apple's provisioning).
+4. Pick your iPhone from the device dropdown and press ▶ Play — or from
+   the terminal:
+   ```bash
+   flutter run --release
+   ```
+5. First launch on the phone: **Settings → General → VPN & Device
+   Management → Trust** the developer certificate.
+
+> ⏱ Free Apple ID signed apps expire every **7 days** and are capped at
+> 3 self-signed apps. Fine for personal use; use the paid program below
+> for TestFlight distribution.
+
+#### C — Build an `.ipa` for TestFlight / App Store ($99/yr Apple Developer Program required)
+
+```bash
+# Build a release .ipa
+flutter build ipa --release
+# Output: build/ios/ipa/*.ipa
+
+# Upload to App Store Connect (TestFlight + App Store)
+xcrun altool --upload-app \
+  -f build/ios/ipa/Runner.ipa \
+  -t ios \
+  -u YOUR_APPLE_ID \
+  -p APP_SPECIFIC_PASSWORD
+```
+
+Generate an **app-specific password** at
+<https://appleid.apple.com/account/manage> → Sign-In and Security →
+App-Specific Passwords (don't use your real Apple ID password).
+
+Alternatively open `build/ios/archive/Runner.xcarchive` in Xcode and use
+the **Organizer** window → *Distribute App* for a GUI flow.
+
+#### D — Unsigned `.app` for a running simulator (dropdown-install, no device/account)
+
+```bash
+flutter build ios --simulator
+# Output: build/ios/iphonesimulator/Runner.app
+# Drag the Runner.app onto a running simulator window to install.
+```
+
+### 4.6 Google Sign-In — one extra iOS step
+
+If you want the "Continue with Google" button to work on iOS, add this
+block to `ios/Runner/Info.plist` (just before the closing `</dict>`),
+replacing `REVERSED_CLIENT_ID` with the value from
+`GoogleService-Info.plist`:
+
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>com.googleusercontent.apps.YOUR_REVERSED_CLIENT_ID</string>
+    </array>
+  </dict>
+</array>
+```
+
+### 4.7 Common iOS build errors
+
+| Error | Fix |
+|---|---|
+| `No profiles for 'com.example.res' were found` | Change the bundle ID in Xcode to something unique (`com.yourname.venuereservation`) |
+| `GoogleService-Info.plist not found` | Re-run `flutterfire configure --platforms=ios` and ensure the file is in `ios/Runner/` + added to the Runner target in Xcode |
+| `CocoaPods could not find compatible versions` | `cd ios && pod repo update && pod install` |
+| `ffi` native errors on Apple Silicon | `arch -x86_64 pod install` (see §4.4) |
+| App launches then crashes immediately with Google Sign-In | You skipped §4.6 — add the URL scheme to Info.plist |
+| White screen forever on first launch | Open Console.app, filter by the device — usually a missing `GoogleService-Info.plist` or wrong bundle ID |
+
+### 4.8 Minimum iOS version
+
+The project targets **iOS 12.0+** by default (set in `ios/Podfile`). If
+you need a newer floor (e.g. for a package that requires iOS 13), edit:
+
+```ruby
+# ios/Podfile
+platform :ios, '13.0'
+```
+
+Then run `cd ios && pod install` again.
+
+## 5. Project layout
 
 ```
 lib/
@@ -108,7 +289,7 @@ lib/
 firestore.rules                # Deployable security rules (RBAC)
 ```
 
-## 5. Firestore schema
+## 6. Firestore schema
 
 ```jsonc
 users/{uid} = {
@@ -138,7 +319,7 @@ bookings/{bookingId} = {
 }
 ```
 
-## 6. Role capabilities at a glance
+## 7. Role capabilities at a glance
 
 | Capability                                  | Guest | Client | Owner | Admin |
 |---------------------------------------------|:-----:|:------:|:-----:|:-----:|
@@ -152,7 +333,7 @@ bookings/{bookingId} = {
 | Promote/demote users & suspend accounts     |       |        |       |  ✅   |
 | View platform-wide metrics                  |       |        |       |  ✅   |
 
-## 7. Notes on the multi-date calendar
+## 8. Notes on the multi-date calendar
 
 The reservation flow computes blocked dates **in real time** by intersecting
 the selected unit IDs with existing `pending`/`confirmed` bookings for the
@@ -160,7 +341,7 @@ venue. Only once the user picks at least one unit do blocked dates appear
 (so availability is accurate to the exact chosen unit combination). See
 `BookingService.computeBlockedDates` for the exact logic.
 
-## 8. Where to go next
+## 9. Where to go next
 
 - **Push notifications** on booking status change (FCM + a Cloud Function).
 - **Images per unit** stored in Firebase Storage.

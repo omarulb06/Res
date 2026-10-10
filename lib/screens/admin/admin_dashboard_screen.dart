@@ -7,6 +7,8 @@ import '../../models/venue.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/venue_provider.dart';
+import '../../l10n/app_strings.dart';
+import '../../widgets/settings_sheet.dart';
 import '../../widgets/state_views.dart';
 import '../auth/login_screen.dart';
 import '../client/discover_screen.dart';
@@ -24,15 +26,16 @@ class AdminDashboardScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text('Admin · ${auth.user?.displayName ?? ''}'),
           actions: [
+            const SettingsAppBarAction(),
             IconButton(
-              tooltip: 'Browse as client',
+              tooltip: S.of(context).browseAsClient,
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DiscoverScreen()),
               ),
               icon: const Icon(Icons.explore_outlined),
             ),
             IconButton(
-              tooltip: 'Sign out',
+              tooltip: S.of(context).signOut,
               onPressed: () async {
                 await context.read<AuthProvider>().signOut();
                 if (!context.mounted) return;
@@ -71,7 +74,7 @@ class _OverviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Venue>>(
-      stream: context.read<VenueProvider>().watchAll(),
+      stream: context.read<VenueProvider>().watchAllForAdmin(),
       builder: (ctx, vSnap) {
         return StreamBuilder<List<Booking>>(
           stream: context.read<BookingProvider>().watchAll(),
@@ -283,7 +286,7 @@ class _ApprovalsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Venue>>(
-      stream: context.read<VenueProvider>().watchAll(),
+      stream: context.read<VenueProvider>().watchAllForAdmin(),
       builder: (ctx, snap) {
         if (!snap.hasData) return const LoadingView();
         final venues = snap.data!;

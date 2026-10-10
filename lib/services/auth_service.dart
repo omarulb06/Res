@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/app_user.dart';
 import 'app_config.dart';
@@ -94,12 +95,54 @@ class AuthService {
     return created;
   }
 
+  /// Sign in with a Google account via the native account picker.
+  ///
+  /// On first sign-in, creates a corresponding `/users/{uid}` document with
+  /// role=client. Subsequent sign-ins reuse the existing document (and its
+  /// role, which may have been promoted to owner/admin by an admin).
+  Future<AppUser> signInWithGoogle() async {
+    if (AppConfig.useMockData) {
+      // Fall back to a demo client in mock mode (no OAuth available offline).
+      final demo = await MockBackend.instance.findUserByEmail('client@demo.app');
+      _mockCurrentUser = demo;
+      _mockAuthCtrl.add(demo);
+      return demo!;
+    }
+
+    final googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) {
+      throw AuthException('Google sign-in was cancelled.');
+    }
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    final cred = await _auth.signInWithCredential(credential);
+
+    final doc = await _usersCol.doc(cred.user!.uid).get();
+    if (!doc.exists) {
+      final created = AppUser(
+        uid: cred.user!.uid,
+        email: cred.user!.email ?? googleUser.email,
+        displayName: cred.user!.displayName ?? googleUser.displayName,
+        role: UserRole.client,
+        createdAt: DateTime.now(),
+      );
+      await _usersCol.doc(cred.user!.uid).set(created.toMap());
+      return created;
+    }
+    return AppUser.fromMap(doc.id, doc.data()!);
+  }
+
   Future<void> signOut() async {
     if (AppConfig.useMockData) {
       _mockCurrentUser = null;
       _mockAuthCtrl.add(null);
       return;
     }
+    // Sign out of both Google (if used) and Firebase.
+    try { await GoogleSignIn().signOut(); } catch (_) {}
     await _auth.signOut();
   }
 

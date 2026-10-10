@@ -6,6 +6,8 @@ import '../../models/venue.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/venue_provider.dart';
+import '../../l10n/app_strings.dart';
+import '../../widgets/settings_sheet.dart';
 import '../../widgets/state_views.dart';
 import '../auth/login_screen.dart';
 import '../client/discover_screen.dart';
@@ -20,6 +22,7 @@ class OwnerDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final me = auth.user;
+    final s = S.of(context);
 
     return DefaultTabController(
       length: 3,
@@ -27,15 +30,16 @@ class OwnerDashboardScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text('Owner · ${me?.displayName ?? me?.email ?? ''}'),
           actions: [
+            const SettingsAppBarAction(),
             IconButton(
-              tooltip: 'Browse as client',
+              tooltip: s.browseAsClient,
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DiscoverScreen()),
               ),
               icon: const Icon(Icons.explore_outlined),
             ),
             IconButton(
-              tooltip: 'Sign out',
+              tooltip: s.signOut,
               onPressed: () async {
                 await context.read<AuthProvider>().signOut();
                 if (!context.mounted) return;
@@ -47,10 +51,10 @@ class OwnerDashboardScreen extends StatelessWidget {
               icon: const Icon(Icons.logout_rounded),
             ),
           ],
-          bottom: const TabBar(tabs: [
-            Tab(icon: Icon(Icons.store_outlined), text: 'My Venues'),
-            Tab(icon: Icon(Icons.inbox_outlined), text: 'Bookings'),
-            Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Agenda'),
+          bottom: TabBar(tabs: [
+            Tab(icon: const Icon(Icons.store_outlined), text: s.myVenues),
+            Tab(icon: const Icon(Icons.inbox_outlined), text: s.bookings),
+            Tab(icon: const Icon(Icons.calendar_month_outlined), text: s.agenda),
           ]),
         ),
         floatingActionButton: FloatingActionButton.extended(
@@ -60,7 +64,7 @@ class OwnerDashboardScreen extends StatelessWidget {
             ),
           ),
           icon: const Icon(Icons.add),
-          label: const Text('New venue'),
+          label: Text(s.newVenue),
         ),
         body: TabBarView(
           children: [

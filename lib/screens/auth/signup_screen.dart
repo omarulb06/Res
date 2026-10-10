@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/app_user.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/settings_sheet.dart';
 import '../splash_screen.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -17,7 +19,10 @@ class _SignupScreenState extends State<SignupScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  UserRole _role = UserRole.owner;
+  // Everyone signs up as a Client. Admins promote selected users to
+  // Owner/Admin from the in-app Admin → Users tab. The Firestore rules
+  // enforce this server-side (create requires role == 'client').
+  static const UserRole _role = UserRole.client;
   bool _busy = false;
   String? _error;
 
@@ -58,7 +63,10 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      appBar: AppBar(
+        title: Text(S.of(context).createAccount),
+        actions: const [SettingsAppBarAction()],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -105,31 +113,30 @@ class _SignupScreenState extends State<SignupScreen> {
                       validator: (v) =>
                           (v == null || v.length < 6) ? 'Minimum 6 characters' : null,
                     ),
-                    const SizedBox(height: 16),
-                    Text('I am a…',
-                        style: Theme.of(context).textTheme.labelLarge),
-                    const SizedBox(height: 8),
-                    SegmentedButton<UserRole>(
-                      segments: const [
-                        ButtonSegment(
-                            value: UserRole.client,
-                            label: Text('Client'),
-                            icon: Icon(Icons.person_outline)),
-                        ButtonSegment(
-                            value: UserRole.owner,
-                            label: Text('Owner'),
-                            icon: Icon(Icons.store_outlined)),
-                      ],
-                      selected: {_role},
-                      onSelectionChanged: (s) => setState(() => _role = s.first),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Admin roles are granted by an existing admin.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: cs.outline),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: cs.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'New accounts start as Clients. Ask an admin '
+                              'to promote you to Owner (venue manager) or '
+                              'Admin from the in-app Users panel.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 10),

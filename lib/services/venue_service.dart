@@ -8,7 +8,23 @@ class VenueService {
   CollectionReference<Map<String, dynamic>> get _col =>
       FirebaseFirestore.instance.collection('venues');
 
+  /// Stream of **approved** venues — safe for guests and clients.
+  ///
+  /// Firestore security rules only allow non-admin users to read venues
+  /// where `isApprovedByAdmin == true`. The query filter below mirrors that
+  /// constraint so the list query is accepted.
   Stream<List<Venue>> watchAll() {
+    if (AppConfig.useMockData) return MockBackend.instance.watchVenues();
+    return _col
+        .where('isApprovedByAdmin', isEqualTo: true)
+        .snapshots()
+        .map((s) => s.docs.map((d) => Venue.fromMap(d.id, d.data())).toList());
+  }
+
+  /// Stream of **all** venues (approved and pending) — admin-only use.
+  /// Non-admin callers will hit permission-denied; call this only from
+  /// admin-gated screens.
+  Stream<List<Venue>> watchAllForAdmin() {
     if (AppConfig.useMockData) return MockBackend.instance.watchVenues();
     return _col.snapshots().map(
         (s) => s.docs.map((d) => Venue.fromMap(d.id, d.data())).toList());

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/venue.dart';
 import '../../providers/venue_provider.dart';
+import '../../widgets/settings_sheet.dart';
 import '../../widgets/state_views.dart';
 import 'reservation_screen.dart';
 
@@ -10,9 +12,16 @@ class VenueDetailScreen extends StatelessWidget {
   final String venueId;
   const VenueDetailScreen({super.key, required this.venueId});
 
+  String _categoryLabel(S s, VenueCategory c) => switch (c) {
+        VenueCategory.indoor => s.categoryIndoor,
+        VenueCategory.outdoor => s.categoryOutdoor,
+        VenueCategory.mixed => s.categoryMixed,
+      };
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final s = S.of(context);
     return Scaffold(
       body: StreamBuilder<List<Venue>>(
         stream: context.read<VenueProvider>().watchAll(),
@@ -26,10 +35,10 @@ class VenueDetailScreen extends StatelessWidget {
               .firstWhere((_) => true, orElse: () => null);
 
           if (venue == null) {
-            return const EmptyView(
+            return EmptyView(
               icon: Icons.sentiment_dissatisfied,
-              title: 'Venue not found',
-              message: 'This listing may have been removed by its owner.',
+              title: s.venueNotFound,
+              message: s.venueNotFoundHint,
             );
           }
 
@@ -38,6 +47,7 @@ class VenueDetailScreen extends StatelessWidget {
               SliverAppBar(
                 pinned: true,
                 expandedHeight: 240,
+                actions: const [SettingsAppBarAction()],
                 flexibleSpace: FlexibleSpaceBar(
                   title: Text(venue.title,
                       style: const TextStyle(
@@ -88,28 +98,29 @@ class VenueDetailScreen extends StatelessWidget {
                         children: [
                           _InfoPill(
                               icon: Icons.category_outlined,
-                              label: venue.category.label),
+                              label: _categoryLabel(s, venue.category)),
                           _InfoPill(
                               icon: Icons.groups_2_outlined,
-                              label: 'Up to ${venue.maxCapacity} guests'),
+                              label:
+                                  '${s.upToGuests} ${venue.maxCapacity} ${s.guests}'),
                           _InfoPill(
                               icon: Icons.payments_outlined,
                               label:
-                                  'From \$${venue.minPricePerDay.toStringAsFixed(0)}/day'),
+                                  '${s.fromPerDay} ${s.perDay(venue.minPricePerDay.toStringAsFixed(0))}'),
                           if (!venue.isPublic)
-                            const _InfoPill(
+                            _InfoPill(
                                 icon: Icons.lock_rounded,
-                                label: 'Private'),
+                                label: s.badgePrivate),
                         ],
                       ),
                       const SizedBox(height: 20),
-                      Text('About this venue',
+                      Text(s.aboutThisVenue,
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 6),
                       Text(venue.description,
                           style: Theme.of(context).textTheme.bodyMedium),
                       const SizedBox(height: 24),
-                      Text('Available Units',
+                      Text(s.availableUnits,
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 8),
                       for (final u in venue.units)
@@ -124,9 +135,9 @@ class VenueDetailScreen extends StatelessWidget {
                             title: Text(u.name,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600)),
-                            subtitle: Text('Capacity: ${u.capacity} guests'),
+                            subtitle: Text(s.capacityValue(u.capacity)),
                             trailing: Text(
-                              '\$${u.pricePerDay.toStringAsFixed(0)}/day',
+                              s.perDay(u.pricePerDay.toStringAsFixed(0)),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w700),
                             ),
@@ -151,7 +162,7 @@ class VenueDetailScreen extends StatelessWidget {
               ),
             ),
             icon: const Icon(Icons.event_available_rounded),
-            label: const Text('Reserve dates'),
+            label: Text(s.reserveDates),
           ),
         ),
       ),

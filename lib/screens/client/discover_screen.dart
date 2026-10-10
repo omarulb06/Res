@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/venue.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/venue_provider.dart';
 import '../../widgets/pin_dialog.dart';
+import '../../widgets/settings_sheet.dart';
 import '../../widgets/state_views.dart';
 import '../../widgets/venue_card.dart';
 import '../auth/login_screen.dart';
@@ -23,22 +25,30 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final Set<VenueCategory> _categoryFilter = {};
   int _minCapacity = 0;
 
+  String _categoryLabel(S s, VenueCategory c) => switch (c) {
+        VenueCategory.indoor => s.categoryIndoor,
+        VenueCategory.outdoor => s.categoryOutdoor,
+        VenueCategory.mixed => s.categoryMixed,
+      };
+
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final auth = context.watch<AuthProvider>();
     final venueProv = context.read<VenueProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discover Venues'),
+        title: Text(s.discoverVenues),
         actions: [
+          const SettingsAppBarAction(),
           if (auth.user == null)
             TextButton.icon(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
               ),
               icon: const Icon(Icons.login_rounded),
-              label: const Text('Sign in'),
+              label: Text(s.signIn),
             )
           else
             PopupMenuButton<String>(
@@ -53,12 +63,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 PopupMenuItem(
                   value: 'profile',
                   enabled: false,
-                  child: Text('Signed in as ${auth.user!.email}'),
+                  child: Text('${s.signedInAs} ${auth.user!.email}'),
                 ),
-                const PopupMenuItem(value: 'signout', child: Text('Sign out')),
+                PopupMenuItem(value: 'signout', child: Text(s.signOut)),
               ],
               child: Padding(
-                padding: const EdgeInsets.only(right: 12),
+                padding: const EdgeInsetsDirectional.only(end: 12),
                 child: CircleAvatar(
                   backgroundColor:
                       Theme.of(context).colorScheme.primaryContainer,
@@ -83,9 +93,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: TextField(
               onChanged: (v) => setState(() => _query = v),
-              decoration: const InputDecoration(
-                hintText: 'Search venues or locations…',
-                prefixIcon: Icon(Icons.search_rounded),
+              decoration: InputDecoration(
+                hintText: s.searchHint,
+                prefixIcon: const Icon(Icons.search_rounded),
               ),
             ),
           ),
@@ -99,7 +109,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: FilterChip(
-                      label: Text(cat.label),
+                      label: Text(_categoryLabel(s, cat)),
                       selected: _categoryFilter.contains(cat),
                       onSelected: (sel) => setState(() {
                         if (sel) {
@@ -116,8 +126,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   child: ActionChip(
                     avatar: const Icon(Icons.groups_outlined, size: 18),
                     label: Text(_minCapacity == 0
-                        ? 'Any capacity'
-                        : 'Capacity ≥ $_minCapacity'),
+                        ? s.anyCapacity
+                        : '${s.capacityAtLeast} $_minCapacity'),
                     onPressed: () async {
                       final v = await showModalBottomSheet<int>(
                         context: context,
@@ -135,10 +145,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               stream: venueProv.watchAll(),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const LoadingView(label: 'Loading venues…');
+                  return LoadingView(label: s.loadingVenues);
                 }
                 if (snap.hasError) {
-                  return ErrorView(message: 'Failed to load venues:\n${snap.error}');
+                  return ErrorView(message: '${s.failedToLoadVenues}:\n${snap.error}');
                 }
                 final all = snap.data ?? const <Venue>[];
                 final filtered = all.where((v) {
@@ -159,11 +169,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 }).toList();
 
                 if (filtered.isEmpty) {
-                  return const EmptyView(
+                  return EmptyView(
                     icon: Icons.search_off_rounded,
-                    title: 'No venues match',
-                    message:
-                        'Try clearing filters or searching for a different name or location.',
+                    title: s.noVenuesMatch,
+                    message: s.noVenuesMatchHint,
                   );
                 }
 
@@ -239,16 +248,17 @@ class _CapacityPickerState extends State<_CapacityPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Minimum capacity',
+            Text(s.minCapacity,
                 style: Theme.of(context).textTheme.titleMedium),
             Text(
-              _val == 0 ? 'Any' : '≥ ${_val.toInt()} guests',
+              _val == 0 ? s.any : '≥ ${_val.toInt()} ${s.guests}',
               style: Theme.of(context).textTheme.displaySmall,
             ),
             Slider(
@@ -256,7 +266,7 @@ class _CapacityPickerState extends State<_CapacityPicker> {
               min: 0,
               max: 1000,
               divisions: 20,
-              label: _val == 0 ? 'Any' : _val.toInt().toString(),
+              label: _val == 0 ? s.any : _val.toInt().toString(),
               onChanged: (v) => setState(() => _val = v),
             ),
             Row(
@@ -264,14 +274,14 @@ class _CapacityPickerState extends State<_CapacityPicker> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context, 0),
-                    child: const Text('Clear'),
+                    child: Text(s.clear),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
                     onPressed: () => Navigator.pop(context, _val.toInt()),
-                    child: const Text('Apply'),
+                    child: Text(s.apply),
                   ),
                 ),
               ],

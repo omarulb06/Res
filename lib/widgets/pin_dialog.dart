@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/app_strings.dart';
+
 /// Shows a sleek 4-6 digit PIN dialog. Returns the entered code on success,
 /// or `null` if cancelled. The caller is responsible for validating the PIN
 /// against the venue's accessCode.
@@ -44,14 +46,14 @@ class _PinDialogState extends State<PinDialog> {
     super.dispose();
   }
 
-  void _submit() {
+  void _submit(S s) {
     final code = _ctrl.text.trim();
     if (code.length < 4 || code.length > 6) {
-      setState(() => _error = 'Enter a 4–6 digit access code.');
+      setState(() => _error = s.enterPinLength);
       return;
     }
     if (code != widget.expectedCode) {
-      setState(() => _error = 'Incorrect code. Please try again.');
+      setState(() => _error = s.incorrectCode);
       return;
     }
     Navigator.of(context).pop(true);
@@ -60,6 +62,7 @@ class _PinDialogState extends State<PinDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final s = S.of(context);
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       icon: CircleAvatar(
@@ -68,12 +71,12 @@ class _PinDialogState extends State<PinDialog> {
         child: Icon(Icons.lock_rounded,
             color: cs.onSecondaryContainer, size: 28),
       ),
-      title: const Text('Private Venue'),
+      title: Text(s.privateVenue),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '“${widget.venueTitle}” is protected. Enter the 4–6 digit access code shared by the owner.',
+            '“${widget.venueTitle}” ${s.privateVenueDescription}',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -92,18 +95,18 @@ class _PinDialogState extends State<PinDialog> {
               hintText: '••••',
               errorText: _error,
             ),
-            onSubmitted: (_) => _submit(),
+            onSubmitted: (_) => _submit(s),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(s.cancel),
         ),
         FilledButton(
-          onPressed: _submit,
-          child: const Text('Unlock'),
+          onPressed: () => _submit(s),
+          child: Text(s.unlock),
         ),
       ],
     );

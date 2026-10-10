@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/app_config.dart';
+import '../../widgets/settings_sheet.dart';
 import '../splash_screen.dart';
 import 'signup_screen.dart';
 
@@ -49,6 +51,25 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _googleSignIn() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await context.read<AuthProvider>().signInWithGoogle();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()),
+        (_) => false,
+      );
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _demoFill(String email) {
     _email.text = email;
     _password.text = 'password';
@@ -57,9 +78,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final s = S.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in')),
+      appBar: AppBar(
+        title: Text(s.signIn),
+        actions: const [SettingsAppBarAction()],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -74,12 +99,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     Icon(Icons.event_available_rounded,
                         size: 56, color: cs.primary),
                     const SizedBox(height: 12),
-                    Text('Welcome back',
+                    Text(s.welcomeBack,
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 4),
                     Text(
-                      'Sign in as a Venue Owner or Admin.',
+                      s.welcomeBackSubtitle,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: cs.outline,
@@ -90,15 +115,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.mail_outline),
+                      decoration: InputDecoration(
+                        labelText: s.email,
+                        prefixIcon: const Icon(Icons.mail_outline),
                       ),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
-                          return 'Email is required';
+                          return s.required;
                         }
-                        if (!v.contains('@')) return 'Invalid email';
+                        if (!v.contains('@')) return s.invalidEmail;
                         return null;
                       },
                     ),
@@ -107,13 +132,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _password,
                       obscureText: true,
                       autofillHints: const [AutofillHints.password],
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outline),
+                      decoration: InputDecoration(
+                        labelText: s.password,
+                        prefixIcon: const Icon(Icons.lock_outline),
                       ),
                       validator: (v) {
                         if (v == null || v.length < 6) {
-                          return 'Minimum 6 characters';
+                          return s.min6chars;
                         }
                         return null;
                       },
@@ -132,7 +157,31 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Sign in'),
+                          : Text(s.signIn),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text(
+                            s.or,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(color: cs.outline),
+                          ),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _googleSignIn,
+                      icon: const Icon(Icons.account_circle_outlined),
+                      label: Text(s.continueWithGoogle),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
@@ -141,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           : () => Navigator.of(context).push(MaterialPageRoute(
                                 builder: (_) => const SignupScreen(),
                               )),
-                      child: const Text("Don't have an account? Create one"),
+                      child: Text(s.noAccount),
                     ),
                     if (AppConfig.useMockData) ...[
                       const Divider(height: 32),

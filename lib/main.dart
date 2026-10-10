@@ -4,12 +4,18 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'providers/settings_provider.dart';
 import 'services/app_config.dart';
 
 /// Entry point. Initializes Firebase if configured; otherwise boots in
 /// mock-data mode so the UI is usable immediately for demos and tests.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load user preferences (theme + locale) before first paint so we don't
+  // flash the default theme/language on cold start.
+  final settings = SettingsProvider();
+  await settings.init();
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -22,5 +28,5 @@ Future<void> main() async {
     }
   }
 
-  runApp(const VenueReservationApp());
+  runApp(VenueReservationApp(settings: settings));
 }

@@ -127,13 +127,20 @@ service cloud.firestore {
 
     // ------------------------------ bookings --------------------------------
     //
-    // Reads:
-    //   - Admin can read all.
-    //   - The venue owner can read bookings for their venues.
-    //   - For guest-created bookings (no auth), we allow reading only by the
-    //     admin/owner — guests do not get read access by email to avoid PII
-    //     scraping. If you want guest "booking lookup by code", add a
-    //     short-lived callable function.
+    // Reads (MVP):
+    //   - Public read is allowed so the client reservation screen can compute
+    //     availability (which dates are already booked for a venue+units
+    //     combination) WITHOUT requiring the client to log in.
+    //
+    //   ⚠️ TRADE-OFF: this exposes booking client contact fields
+    //   (clientName / clientPhone / clientEmail) to anyone who can read the
+    //   Firestore collection. Acceptable for a demo app with "pay on-site"
+    //   semantics (no payment data stored) and public reservations by name.
+    //
+    //   For production hardening, replace with a Cloud Function that mirrors
+    //   only { venueId, unitIds, dates, status } into a public
+    //   `/venue_availability` collection, and restrict `/bookings` to
+    //   admin + venue owner.
     //
     // Creates:
     //   - ANYONE (incl. guest) can create a booking as long as the data is
@@ -148,11 +155,7 @@ service cloud.firestore {
     //   - Admin only.
     //
     match /bookings/{bookingId} {
-      allow read: if
-        isAdmin()
-        || (isOwner()
-            && get(/databases/$(database)/documents/venues/$(resource.data.venueId))
-                 .data.ownerId == request.auth.uid);
+      allow read: if true; // MVP — see note above about public read trade-off
 
       allow create: if
         validateBookingShape(request.resource.data)

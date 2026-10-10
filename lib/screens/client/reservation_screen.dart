@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/booking.dart';
 import '../../models/venue.dart';
 import '../../models/venue_unit.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/venue_provider.dart';
 import '../../widgets/multi_date_calendar.dart';
+import '../../widgets/settings_sheet.dart';
 import '../../widgets/state_views.dart';
 
 /// Multi-date reservation flow. The client can:
@@ -48,13 +50,14 @@ class _ReservationScreenState extends State<ReservationScreen> {
   }
 
   Future<void> _submit(Venue venue) async {
+    final s = S.of(context);
     if (!_form.currentState!.validate()) return;
     if (_unitIds.isEmpty) {
-      _snack('Pick at least one unit to reserve.');
+      _snack(s.pickAtLeastOneUnit);
       return;
     }
     if (_dates.isEmpty) {
-      _snack('Pick at least one date.');
+      _snack(s.pickAtLeastOneDate);
       return;
     }
 
@@ -79,10 +82,9 @@ class _ReservationScreenState extends State<ReservationScreen> {
         builder: (_) => AlertDialog(
           icon: const Icon(Icons.check_circle_rounded,
               color: Colors.green, size: 56),
-          title: const Text('Reservation submitted!'),
+          title: Text(s.reservationSubmitted),
           content: Text(
-            'Your booking for ${_dates.length} day(s) is marked as "Pending Payment". '
-            'The venue owner will confirm and collect payment on arrival.',
+            s.reservationSubmittedDetail(_dates.length),
             textAlign: TextAlign.center,
           ),
           actions: [
@@ -92,13 +94,13 @@ class _ReservationScreenState extends State<ReservationScreen> {
                 Navigator.of(context).pop(); // back to venue detail
                 Navigator.of(context).pop(); // back to discover
               },
-              child: const Text('Done'),
+              child: Text(s.done),
             ),
           ],
         ),
       );
     } catch (e) {
-      _snack('Failed to submit: $e');
+      _snack('${s.failedToSubmit}: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -110,8 +112,12 @@ class _ReservationScreenState extends State<ReservationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Reserve dates')),
+      appBar: AppBar(
+        title: Text(s.reserveDates),
+        actions: const [SettingsAppBarAction()],
+      ),
       body: StreamBuilder<List<Venue>>(
         stream: context.read<VenueProvider>().watchAll(),
         builder: (ctx, snap) {
@@ -121,10 +127,10 @@ class _ReservationScreenState extends State<ReservationScreen> {
               .cast<Venue?>()
               .firstWhere((_) => true, orElse: () => null);
           if (venue == null) {
-            return const EmptyView(
+            return EmptyView(
               icon: Icons.error_outline,
-              title: 'Venue unavailable',
-              message: 'This venue may have been removed.',
+              title: s.venueNotFound,
+              message: s.venueNotFoundHint,
             );
           }
 
@@ -170,9 +176,8 @@ class _ReservationScreenState extends State<ReservationScreen> {
                       const SizedBox(height: 20),
                       _SectionLabel(
                           number: 1,
-                          title: 'Pick unit(s) to reserve',
-                          hint:
-                              'You can book several units together (e.g. Indoor Hall + Garden).'),
+                          title: s.stepPickUnits,
+                          hint: s.stepPickUnitsHint),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 10,
@@ -195,10 +200,10 @@ class _ReservationScreenState extends State<ReservationScreen> {
                       const SizedBox(height: 24),
                       _SectionLabel(
                         number: 2,
-                        title: 'Select dates',
+                        title: s.stepPickDates,
                         hint: _unitIds.isEmpty
-                            ? 'Pick units above to see live availability.'
-                            : 'Tap each date you want. Non-consecutive dates allowed.',
+                            ? s.stepPickDatesHintPickUnits
+                            : s.stepPickDatesHintTap,
                       ),
                       const SizedBox(height: 10),
                       Card(
@@ -236,43 +241,42 @@ class _ReservationScreenState extends State<ReservationScreen> {
                       const SizedBox(height: 24),
                       _SectionLabel(
                         number: 3,
-                        title: 'Your contact details',
-                        hint:
-                            'The owner will use this to confirm your reservation.',
+                        title: s.stepContactDetails,
+                        hint: s.stepContactDetailsHint,
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: _name,
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Full name',
-                          prefixIcon: Icon(Icons.person_outline),
+                        decoration: InputDecoration(
+                          labelText: s.fullName,
+                          prefixIcon: const Icon(Icons.person_outline),
                         ),
                         validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                            (v == null || v.trim().isEmpty) ? s.required : null,
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: _phone,
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone',
-                          prefixIcon: Icon(Icons.phone_outlined),
+                        decoration: InputDecoration(
+                          labelText: s.phone,
+                          prefixIcon: const Icon(Icons.phone_outlined),
                         ),
                         validator: (v) =>
-                            (v == null || v.trim().length < 6) ? 'Invalid phone' : null,
+                            (v == null || v.trim().length < 6) ? s.invalidPhone : null,
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.mail_outline),
+                        decoration: InputDecoration(
+                          labelText: s.email,
+                          prefixIcon: const Icon(Icons.mail_outline),
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Required';
-                          if (!v.contains('@')) return 'Invalid email';
+                          if (v == null || v.trim().isEmpty) return s.required;
+                          if (!v.contains('@')) return s.invalidEmail;
                           return null;
                         },
                       ),
@@ -292,7 +296,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2))
                             : const Icon(Icons.check_circle_outline),
-                        label: const Text('Confirm reservation (Pay on-site)'),
+                        label: Text(s.confirmReservation),
                       ),
                     ],
                   ),
@@ -427,6 +431,7 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final s = S.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -439,14 +444,14 @@ class _SummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reservation summary',
+                Text(s.reservationSummary,
                     style: TextStyle(
                       color: cs.onPrimaryContainer,
                       fontWeight: FontWeight.w700,
                     )),
                 const SizedBox(height: 4),
                 Text(
-                  '$unitCount unit(s) · $dayCount day(s) · Pay on-site',
+                  s.reservationSummaryLine(unitCount, dayCount),
                   style: TextStyle(color: cs.onPrimaryContainer),
                 ),
               ],

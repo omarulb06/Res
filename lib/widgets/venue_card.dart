@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/venue.dart';
 
 class VenueCard extends StatelessWidget {
@@ -8,9 +9,16 @@ class VenueCard extends StatelessWidget {
 
   const VenueCard({super.key, required this.venue, required this.onTap});
 
+  String _categoryLabel(S s, VenueCategory c) => switch (c) {
+        VenueCategory.indoor => s.categoryIndoor,
+        VenueCategory.outdoor => s.categoryOutdoor,
+        VenueCategory.mixed => s.categoryMixed,
+      };
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final s = S.of(context);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -50,25 +58,25 @@ class VenueCard extends StatelessWidget {
                         ),
                 ),
                 if (!venue.isPublic)
-                  Positioned(
+                  PositionedDirectional(
                     top: 10,
-                    right: 10,
+                    end: 10,
                     child: _Badge(
                       color: cs.secondaryContainer,
                       textColor: cs.onSecondaryContainer,
                       icon: Icons.lock_rounded,
-                      label: 'PIN',
+                      label: s.badgePin,
                     ),
                   ),
                 if (!venue.isApprovedByAdmin)
-                  Positioned(
+                  PositionedDirectional(
                     top: 10,
-                    left: 10,
+                    start: 10,
                     child: _Badge(
                       color: cs.errorContainer,
                       textColor: cs.onErrorContainer,
                       icon: Icons.hourglass_top,
-                      label: 'Pending review',
+                      label: s.badgePendingReview,
                     ),
                   ),
               ],
@@ -106,14 +114,16 @@ class VenueCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _Chip(icon: Icons.category_outlined, label: venue.category.label),
+                      _Chip(
+                          icon: Icons.category_outlined,
+                          label: _categoryLabel(s, venue.category)),
                       const SizedBox(width: 6),
                       _Chip(
                           icon: Icons.groups_2_outlined,
-                          label: '${venue.maxCapacity} max'),
+                          label: '${venue.maxCapacity} ${s.guests}'),
                       const Spacer(),
                       Text(
-                        'From \$${venue.minPricePerDay.toStringAsFixed(0)}/day',
+                        '${s.fromPerDay} ${s.perDay(venue.minPricePerDay.toStringAsFixed(0))}',
                         style: Theme.of(context)
                             .textTheme
                             .labelLarge
